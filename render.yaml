@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: xubitv-sports-scraper
+    env: docker
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
