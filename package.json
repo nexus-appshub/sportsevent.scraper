@@ -1,0 +1,18 @@
+{
+  "name": "xubitv-sports-scraper",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "lint": "node --check src/server.js && node --check src/scraper.js && node --check src/sources/espn.js",
+    "test": "node src/test-normalizer.js"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "playwright": "^1.55.0"
+  }
+}
