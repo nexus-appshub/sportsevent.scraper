@@ -3,6 +3,7 @@ import { scrapeEspnLeagues } from './sources/espn.js';
 import { scrape365Scores } from './sources/365scores.js';
 import { scrapeCricket } from './sources/cricket.js';
 import { mergeEvents, pruneEvents } from './normalize.js';
+import { rankEvents } from './ranking.js';
 
 const ALLOWED_SPORTS = new Set(['football', 'cricket']);
 
@@ -55,7 +56,7 @@ class SportsScraper {
       const updated = pruned.filter(e => oldIds.has(e.id)).length;
       const removed = old.filter(e => !newIds.has(e.id)).length;
 
-      this.events = sortEvents(pruned);
+      this.events = rankEvents(pruned);
       this.lastSuccess = new Date().toISOString();
       this.lastError = errors.length ? errors.slice(0, 10) : null;
       this.lastRunStats = {
@@ -93,17 +94,6 @@ class SportsScraper {
       events: this.events,
     };
   }
-}
-
-function sortEvents(events) {
-  const order = { live: 0, upcoming: 1, ended: 2 };
-  return [...events].sort((a, b) => {
-    const s = (order[a.status] ?? 9) - (order[b.status] ?? 9);
-    if (s !== 0) return s;
-    const ta = Date.parse(a.startTime || 0) || 0;
-    const tb = Date.parse(b.startTime || 0) || 0;
-    return ta - tb;
-  });
 }
 
 export const sportsScraper = new SportsScraper();
