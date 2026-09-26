@@ -30,7 +30,7 @@ If ADMIN_SYNC_TOKEN is configured, POST /api/sports/sync requires x-admin-token.
 
 ## Railway deployment
 
-This repo includes a Dockerfile based on the official Playwright image, so Chromium is already available.
+This repo uses a lightweight Node.js Docker runtime. The production scraper does not launch Chromium; it fetches the configured upstream sports JSON feeds directly, which avoids browser/thread resource limits on Railway.
 
 Railway can deploy directly from this repository.
 
