@@ -20,6 +20,11 @@ const SPORT_IDS = String(process.env.SPORTS365_IDS || '1,10')
   .filter(Number.isFinite);
 
 const DAYS_AHEAD = Math.max(1, Number.parseInt(process.env.SPORTS365_DAYS_AHEAD || '3', 10));
+const IMAGE_ENRICH_ENABLED = String(process.env.SPORTS365_IMAGE_ENRICH_ENABLED ?? 'true').toLowerCase() !== 'false';
+const BANNER_ENRICH_LIMIT = Math.max(0, Number.parseInt(process.env.SPORTS365_BANNER_ENRICH_LIMIT || '12', 10));
+const BANNER_CACHE_MS = Math.max(10 * 60_000, Number.parseInt(process.env.SPORTS365_BANNER_CACHE_MINUTES || '360', 10) * 60_000);
+
+const bannerCache = new Map();
 
 const headers = {
   Accept: 'application/json, text/plain, */*',
@@ -79,12 +84,63 @@ function statusFrom(game) {
   return 'upcoming';
 }
 
+function firstUrl(...values) {
+  for (const value of values) {
+    if (!value) continue;
+    if (typeof value === 'string' && /^https?:\/\//i.test(value)) return value;
+    if (typeof value === 'object') {
+      const nested = firstUrl(
+        value.url, value.href, value.src, value.imageUrl, value.image,
+        value.imageUrlLarge, value.imageUrlSmall, value.logo, value.logoUrl
+      );
+      if (nested) return nested;
+    }
+  }
+  return '';
+}
+
+function competitorLogo(c) {
+  const direct = firstUrl(
+    c?.logo, c?.logoUrl, c?.imageUrl, c?.image, c?.picture,
+    c?.images, c?.media
+  );
+  if (direct) return direct;
+
+  // 365Scores exposes competitor id + imageVersion; this mirrors its public image-cache pattern.
+  const id = Number(c?.id);
+  const version = Number(c?.imageVersion);
+  if (Number.isFinite(id) && id > 0 && Number.isFinite(version) && version > 0) {
+    return `https://imagecache.365scores.com/image/upload/f_png,w_128,h_128,c_limit,q_auto:eco,dpr_2,d_Competitors:default1.png/v${version}/Competitors/${id}`;
+  }
+  return '';
+}
+
 function competitor(c) {
   if (!c) return { name: 'TBA' };
+  const logo = competitorLogo(c);
   return {
     name: normalizeText(c.name || c.shortName || c.longName || 'TBA'),
+    ...(logo ? { logo } : {}),
     ...(c.score !== undefined && c.score !== null && Number(c.score) >= 0 ? { score: String(c.score) } : {}),
   };
+}
+
+function extractBannerUrl(game) {
+  const direct = firstUrl(
+    game?.bannerUrl, game?.banner, game?.eventBanner,
+    game?.imageUrl, game?.image, game?.posterUrl, game?.poster,
+    game?.media?.banner, game?.media?.image,
+    game?.images, game?.media
+  );
+  if (direct) return direct;
+
+  const competition = game?.competition || {};
+  return firstUrl(
+    competition?.bannerUrl, competition?.banner,
+    competition?.imageUrl, competition?.image,
+    competition?.logoUrl, competition?.logo,
+    competition?.media?.banner, competition?.media?.image
+  );
 }
 
 function gameState(game, status) {
@@ -111,6 +167,7 @@ function normalizeGame(game, sourceUrl) {
     'Sports'
   );
   const status = statusFrom(game);
+  const bannerUrl = extractBannerUrl(game);
 
   return buildEvent({
     id: game?.id ? `365scores-${game.id}` : undefined,
@@ -122,6 +179,7 @@ function normalizeGame(game, sourceUrl) {
     teamA: home,
     teamB: away,
     badgeText: status === 'live' ? '🔴 LIVE NOW' : status === 'upcoming' ? '⏳ UPCOMING' : '🏁 ENDED',
+    bannerUrl,
     gameState: gameState(game, status),
     venue: game?.venue?.name || game?.venueName,
     source: '365scores',
@@ -134,6 +192,71 @@ function dedupe(games) {
   const map = new Map();
   for (const g of games) map.set(g.id, g);
   return [...map.values()];
+}
+
+async function fetchPageBanner(url, timeoutMs) {
+  if (!url) return '';
+  const cached = bannerCache.get(url);
+  if (cached && Date.now() - cached.at < BANNER_CACHE_MS) return cached.value;
+
+  try {
+    const r = await fetch(url, {
+      headers: {
+        Accept: 'text/html,application/xhtml+xml',
+        'User-Agent': headers['User-Agent'],
+        Referer: 'https://www.365scores.com/',
+      },
+      signal: AbortSignal.timeout(Math.min(timeoutMs, 8000)),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const html = (await r.text()).slice(0, 2_000_000);
+    const matches = [
+      /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+      /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+      /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
+    ];
+    let value = '';
+    for (const re of matches) {
+      const m = html.match(re);
+      if (m?.[1] && /^https?:\/\//i.test(m[1])) {
+        value = m[1].replaceAll('&amp;', '&');
+        break;
+      }
+    }
+    bannerCache.set(url, { at: Date.now(), value });
+    return value;
+  } catch {
+    bannerCache.set(url, { at: Date.now(), value: '' });
+    return '';
+  }
+}
+
+async function enrichBanners(events, timeoutMs) {
+  if (!IMAGE_ENRICH_ENABLED || BANNER_ENRICH_LIMIT <= 0) return events;
+
+  const candidates = events
+    .filter(e => !e.bannerUrl && e.sourceUrl)
+    .sort((a, b) => {
+      const live = (b.status === 'live') - (a.status === 'live');
+      if (live) return live;
+      const ia = Number(a.importanceScore) || 0;
+      const ib = Number(b.importanceScore) || 0;
+      return ib - ia;
+    })
+    .slice(0, BANNER_ENRICH_LIMIT);
+
+  const byId = new Map(events.map(e => [e.id, e]));
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(3, candidates.length) }, async () => {
+    while (cursor < candidates.length) {
+      const event = candidates[cursor++];
+      const bannerUrl = await fetchPageBanner(event.sourceUrl, timeoutMs);
+      if (bannerUrl) byId.set(event.id, { ...event, bannerUrl });
+    }
+  });
+  await Promise.all(workers);
+  return [...byId.values()];
 }
 
 export async function scrape365Scores({ timeoutMs, timezone }) {
@@ -176,5 +299,7 @@ export async function scrape365Scores({ timeoutMs, timezone }) {
     }
   }
 
-  return { events: dedupe(all), errors };
+  const deduped = dedupe(all);
+  const enriched = await enrichBanners(deduped, timeoutMs);
+  return { events: enriched, errors };
 }
