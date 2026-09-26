@@ -1,4 +1,3 @@
-import { chromium } from 'playwright';
 import { buildEvent, mapStatus, normalizeText } from '../normalize.js';
 
 const HEADER_URL = (region, timezone) =>
@@ -20,83 +19,108 @@ function parseDate(value) {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-export async function scrapeCricket({ timeoutMs, region, timezone }) {
-  const browser = await chromium.launch({ headless: true });
-  const request = await browser.request.newContext({
-    extraHTTPHeaders: {
+async function fetchJson(url, timeoutMs) {
+  const response = await fetch(url, {
+    headers: {
       Accept: 'application/json,text/plain,*/*',
-      'User-Agent': 'XubiTV-Sports-Scraper/1.0'
-    }
+      'User-Agent': 'XubiTV-Sports-Scraper/1.1',
+    },
+    signal: AbortSignal.timeout(timeoutMs),
   });
+  if (!response.ok()) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+export async function scrapeCricket({ timeoutMs, region, timezone }) {
   const out = [];
   const errors = [];
+  let header;
+
   try {
-    let header;
-    try {
-      const h = await request.get(HEADER_URL(region, timezone), { timeout: timeoutMs, failOnStatusCode: false });
-      if (!h.ok()) throw new Error(`HTTP ${h.status()}`);
-      header = await h.json();
-    } catch (err) {
-      errors.push({ source: 'espn-cricket-header', error: err?.message || String(err) });
-      return { events: out, errors };
-    }
-
-    const leagues = header?.sports?.find(s => String(s?.name || '').toLowerCase().includes('cricket'))?.leagues
-      || header?.sports?.[0]?.leagues
-      || [];
-
-    for (const league of leagues.slice(0, 80)) {
-      const leagueId = league?.id;
-      if (!leagueId) continue;
-      try {
-        const endpoint = `${CORE_BASE}/${encodeURIComponent(leagueId)}/events?limit=100`;
-        const r = await request.get(endpoint, { timeout: timeoutMs, failOnStatusCode: false });
-        if (!r.ok()) continue;
-        const data = await r.json();
-        const items = Array.isArray(data?.items) ? data.items : Array.isArray(data?.events) ? data.events : [];
-        for (const item of items) {
-          const ref = item?.$ref || item?.ref;
-          let ev = item;
-          if (ref) {
-            const rr = await request.get(ref, { timeout: timeoutMs, failOnStatusCode: false });
-            if (rr.ok()) ev = await rr.json();
-          }
-          const eventId = ev?.id || item?.id;
-          if (!eventId) continue;
-          const startTime = parseDate(valueFrom(ev, ['date', 'startDate', 'startTime']));
-          const comp = ev?.competitions?.[0] || ev?.competition || {};
-          const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
-          const home = competitors.find(c => c.homeAway === 'home') || competitors[0];
-          const away = competitors.find(c => c.homeAway === 'away') || competitors[1];
-          const st = comp?.status || ev?.status || {};
-          const status = mapStatus(st?.type?.state || st?.state, Boolean(st?.type?.completed || st?.completed));
-          out.push(buildEvent({
-            id: `espn-cricket-${leagueId}-${eventId}`,
-            sportCategory: 'Cricket',
-            tournament: normalizeText(league?.name || league?.shortName || `Cricket ${leagueId}`),
-            title: normalizeText(ev?.name || ev?.shortName || `${home?.team?.displayName || home?.team?.name || 'TBA'} vs ${away?.team?.displayName || away?.team?.name || 'TBA'}`),
-            startTime,
-            status,
-            teamA: { name: home?.team?.displayName || home?.team?.name || home?.name, logo: home?.team?.logo, score: valueFrom(home, ['score', 'displayValue']) },
-            teamB: { name: away?.team?.displayName || away?.team?.name || away?.name, logo: away?.team?.logo, score: valueFrom(away, ['score', 'displayValue']) },
-            badgeText: status === 'live' ? '🔴 LIVE NOW' : status === 'upcoming' ? '⏳ UPCOMING' : '🏁 ENDED',
-            gameState: {
-              ...(st?.displayClock ? { clock: String(st.displayClock) } : {}),
-              ...(st?.period ? { period: String(st.period) } : {})
-            },
-            venue: comp?.venue?.fullName || comp?.venue?.displayName,
-            source: 'espn-cricket',
-            sourceUrl: `https://www.espncricinfo.com/series/${encodeURIComponent(String(league?.slug || leagueId))}`,
-          }));
-        }
-      } catch (err) {
-        errors.push({ source: `espn-cricket:${leagueId}`, error: err?.message || String(err) });
-      }
-    }
-  } finally {
-    await request.dispose();
-    await browser.close();
+    header = await fetchJson(HEADER_URL(region, timezone), timeoutMs);
+  } catch (err) {
+    errors.push({ source: 'espn-cricket-header', error: err?.message || String(err) });
+    return { events: out, errors };
   }
+
+  const leagues =
+    header?.sports?.find(s => String(s?.name || '').toLowerCase().includes('cricket'))?.leagues
+    || header?.sports?.[0]?.leagues
+    || [];
+
+  for (const league of leagues.slice(0, 40)) {
+    const leagueId = league?.id;
+    if (!leagueId) continue;
+
+    try {
+      const endpoint = `${CORE_BASE}/${encodeURIComponent(leagueId)}/events?limit=100`;
+      const data = await fetchJson(endpoint, timeoutMs);
+      const items = Array.isArray(data?.items) ? data.items : Array.isArray(data?.events) ? data.events : [];
+
+      for (const item of items) {
+        let ev = item;
+        const ref = item?.$ref || item?.ref;
+
+        if (ref) {
+          try {
+            ev = await fetchJson(ref, timeoutMs);
+          } catch {
+            ev = item;
+          }
+        }
+
+        const eventId = ev?.id || item?.id;
+        if (!eventId) continue;
+
+        const startTime = parseDate(valueFrom(ev, ['date', 'startDate', 'startTime']));
+        const comp = ev?.competitions?.[0] || ev?.competition || {};
+        const competitors = Array.isArray(comp?.competitors) ? comp.competitors : [];
+        const home = competitors.find(c => c.homeAway === 'home') || competitors[0];
+        const away = competitors.find(c => c.homeAway === 'away') || competitors[1];
+        const st = comp?.status || ev?.status || {};
+        const status = mapStatus(
+          st?.type?.state || st?.state,
+          Boolean(st?.type?.completed || st?.completed)
+        );
+
+        out.push(buildEvent({
+          id: `espn-cricket-${leagueId}-${eventId}`,
+          sportCategory: 'Cricket',
+          tournament: normalizeText(league?.name || league?.shortName || `Cricket ${leagueId}`),
+          title: normalizeText(
+            ev?.name ||
+            ev?.shortName ||
+            `${home?.team?.displayName || home?.team?.name || 'TBA'} vs ${away?.team?.displayName || away?.team?.name || 'TBA'}`
+          ),
+          startTime,
+          status,
+          teamA: {
+            name: home?.team?.displayName || home?.team?.name || home?.name,
+            logo: home?.team?.logo,
+            score: valueFrom(home, ['score', 'displayValue'])
+          },
+          teamB: {
+            name: away?.team?.displayName || away?.team?.name || away?.name,
+            logo: away?.team?.logo,
+            score: valueFrom(away, ['score', 'displayValue'])
+          },
+          badgeText: status === 'live' ? '🔴 LIVE NOW' : status === 'upcoming' ? '⏳ UPCOMING' : '🏁 ENDED',
+          gameState: {
+            ...(st?.displayClock ? { clock: String(st.displayClock) } : {}),
+            ...(st?.period ? { period: String(st.period) } : {})
+          },
+          venue: comp?.venue?.fullName || comp?.venue?.displayName,
+          source: 'espn-cricket',
+          sourceUrl: `https://www.espncricinfo.com/series/${encodeURIComponent(String(league?.slug || leagueId))}`,
+        }));
+      }
+    } catch (err) {
+      errors.push({ source: `espn-cricket:${leagueId}`, error: err?.message || String(err) });
+    }
+  }
+
   return { events: dedupe(out), errors };
 }
 
