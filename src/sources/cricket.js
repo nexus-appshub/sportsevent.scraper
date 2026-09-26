@@ -27,7 +27,7 @@ async function fetchJson(url, timeoutMs) {
     },
     signal: AbortSignal.timeout(timeoutMs),
   });
-  if (!response.ok()) {
+  if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
   }
   return response.json();
