@@ -30,5 +30,6 @@ export const config = {
   cricketEnabled: String(process.env.CRICKET_ENABLED ?? 'false').toLowerCase() === 'true',
   scores365Enabled: String(process.env.SCORES365_ENABLED ?? 'true').toLowerCase() !== 'false',
   cricketRegion: process.env.CRICKET_REGION || 'bd',
-  cricketTimezone: process.env.CRICKET_TIMEZONE || 'Asia/Dhaka'
+  cricketTimezone: process.env.CRICKET_TIMEZONE || 'Asia/Dhaka',
+  sports365ImageEnrichEnabled: String(process.env.SPORTS365_IMAGE_ENRICH_ENABLED ?? 'true').toLowerCase() !== 'false'
 };
