@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { scrapeEspnLeagues } from './sources/espn.js';
+import { scrape365Scores } from './sources/365scores.js';
 import { scrapeCricket } from './sources/cricket.js';
 import { mergeEvents, pruneEvents } from './normalize.js';
 
@@ -19,14 +20,19 @@ class SportsScraper {
     this.lastAttempt = new Date().toISOString();
     const started = Date.now();
     try {
-      const [espnResult, cricketResult] = await Promise.all([
-        scrapeEspnLeagues(config.espnLeagues, { timeoutMs: config.requestTimeoutMs }),
+      const [scores365Result, espnResult, cricketResult] = await Promise.all([
+        config.scores365Enabled
+          ? scrape365Scores({ timeoutMs: config.requestTimeoutMs, timezone: config.timezone })
+          : Promise.resolve({ events: [], errors: [] }),
+        config.espnEnabled
+          ? scrapeEspnLeagues(config.espnLeagues, { timeoutMs: config.requestTimeoutMs })
+          : Promise.resolve({ events: [], errors: [] }),
         config.cricketEnabled
           ? scrapeCricket({ timeoutMs: config.requestTimeoutMs, region: config.cricketRegion, timezone: config.cricketTimezone })
           : Promise.resolve({ events: [], errors: [] })
       ]);
-      const incoming = [...espnResult.events, ...cricketResult.events];
-      const errors = [...espnResult.errors, ...cricketResult.errors];
+      const incoming = [...scores365Result.events, ...espnResult.events, ...cricketResult.events];
+      const errors = [...scores365Result.errors, ...espnResult.errors, ...cricketResult.errors];
 
       const old = this.events;
       const oldIds = new Set(old.map(e => e.id));
