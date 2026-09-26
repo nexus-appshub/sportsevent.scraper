@@ -16,6 +16,17 @@ Only **Football** and **Cricket** events are allowed into the public event store
 - Deduplicates events using stable IDs.
 - Refreshes more frequently while live matches exist.
 
+## Images
+
+Team logos are extracted from upstream competitor image fields when available. When 365Scores exposes a competitor ID and `imageVersion`, the scraper can resolve the public 365Scores image-cache logo URL. 365Scores-based examples show competitor image-cache URLs using the competitor ID and image version. citeturn498348search2turn552863search1
+
+For event artwork, the scraper first uses explicit event/competition image fields. For a limited number of important live/upcoming matches without an image field, it can fetch the match page and read its Open Graph/Twitter image metadata. This enrichment is cached and concurrency-limited so it does not turn every sync into hundreds of page requests.
+
+Environment:
+- `SPORTS365_IMAGE_ENRICH_ENABLED=true`
+- `SPORTS365_BANNER_ENRICH_LIMIT=12`
+- `SPORTS365_BANNER_CACHE_MINUTES=360`
+
 ## Match prioritization
 
 The public event list is automatically ordered so higher-priority **Football** and **Cricket** matches appear first within their status group.
