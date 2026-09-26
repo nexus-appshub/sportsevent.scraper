@@ -3,11 +3,13 @@
   "version": "1.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "lint": "node --check src/server.js && node --check src/scraper.js && node --check src/sources/espn.js && node --check src/sources/cricket.js",
+    "lint": "node --check src/server.js && node --check src/scraper.js && node --check src/ranking.js && node --check src/normalize.js && node --check src/sources/espn.js && node --check src/sources/cricket.js && node --check src/sources/365scores.js",
     "test": "node src/test-normalizer.js"
   },
   "dependencies": {
