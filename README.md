@@ -16,6 +16,19 @@ Only **Football** and **Cricket** events are allowed into the public event store
 - Deduplicates events using stable IDs.
 - Refreshes more frequently while live matches exist.
 
+## Match prioritization
+
+The public event list is automatically ordered so higher-priority **Football** and **Cricket** matches appear first within their status group.
+
+Priority is calculated from available upstream metadata such as:
+- major competitions and tournaments
+- finals, semi-finals, playoffs, derbies and deciders
+- popular teams
+- live status
+- how soon an upcoming match starts
+
+The API also returns `importanceScore` and `importanceReasons` on each event. This is an upstream metadata-based priority signal, not a claim about actual Home Air TV user demand. Actual demand can be added later using Home Air TV click/watch/search analytics.
+
 ## API
 
 GET /health
