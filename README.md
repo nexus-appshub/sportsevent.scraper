@@ -28,9 +28,36 @@ GET /api/sports/events?sport=Football
 
 GET /api/sports/status
 
+Returns a stable object:
+
+{
+  "success": true,
+  "status": {
+    "status": "ONLINE",
+    "lastSuccessfulUpdate": "2026-09-26T02:00:00.000Z",
+    "totalEvents": 850,
+    "liveEvents": 15,
+    "upcomingEvents": 739,
+    "endedEvents": 96
+  }
+}
+
 POST /api/sports/sync
 
-If ADMIN_SYNC_TOKEN is configured, POST /api/sports/sync requires x-admin-token.
+Returns only a compact JSON result so the admin panel does not have to parse the full event list:
+
+{
+  "success": true,
+  "message": "Scrape completed successfully",
+  "syncedCount": 850,
+  "updatedAt": "2026-09-26T02:00:00.000Z"
+}
+
+If ADMIN_SYNC_TOKEN is configured, POST /api/sports/sync accepts either:
+- x-admin-token: <TOKEN>
+- Authorization: Bearer <TOKEN>
+
+Leave ADMIN_SYNC_TOKEN empty when you want the Home Air TV admin panel to trigger an open CORS-safe sync.
 
 ## Railway deployment
 
