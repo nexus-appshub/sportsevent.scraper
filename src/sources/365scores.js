@@ -102,7 +102,7 @@ function firstUrl(...values) {
 function competitorLogo(c) {
   const direct = firstUrl(
     c?.logo, c?.logoUrl, c?.imageUrl, c?.image, c?.picture,
-    c?.images, c?.media
+    c?.imageUrlLarge, c?.imageUrlSmall, c?.images, c?.media
   );
   if (direct) return direct;
 
@@ -183,7 +183,7 @@ function normalizeGame(game, sourceUrl) {
     gameState: gameState(game, status),
     venue: game?.venue?.name || game?.venueName,
     source: '365scores',
-    sourceUrl: game?.url || sourceUrl,
+    sourceUrl: game?.url || game?.gameUrl || game?.link || game?.links?.find?.(x => /^https?:\/\//i.test(x?.href || x?.url || ''))?.href || sourceUrl,
     rawUpdatedAt: game?.lastUpdate || game?.updatedAt || null,
   });
 }
@@ -236,7 +236,7 @@ async function enrichBanners(events, timeoutMs) {
   if (!IMAGE_ENRICH_ENABLED || BANNER_ENRICH_LIMIT <= 0) return events;
 
   const candidates = events
-    .filter(e => !e.bannerUrl && e.sourceUrl)
+    .filter(e => !e.bannerUrl && e.sourceUrl && /\/(match|game)\//i.test(e.sourceUrl))
     .sort((a, b) => {
       const live = (b.status === 'live') - (a.status === 'live');
       if (live) return live;
