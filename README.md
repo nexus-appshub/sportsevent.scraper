@@ -1,6 +1,10 @@
-# XubiTV Sports Scraper
+# Home Air TV Sports Scraper
 
-Standalone Node.js + Playwright sports-event service for XubiTV.
+Standalone Node.js sports-event service for Home Air TV.
+
+## Scope
+
+Only **Football** and **Cricket** events are allowed into the public event store. Other sports are filtered out even if an upstream adapter returns them.
 
 ## What it does
 
@@ -47,22 +51,24 @@ LIVE_REFRESH_INTERVAL_MS=10000
 REQUEST_TIMEOUT_MS=12000
 STALE_RETENTION_MINUTES=60
 ENDED_RETENTION_MINUTES=360
-CRICKET_ENABLED=true
+CRICKET_ENABLED=false
+SCORES365_ENABLED=true
+SPORTS365_IDS=1,10
 CRICKET_REGION=bd
 CRICKET_TIMEZONE=Asia/Dhaka
-ESPN_LEAGUES=soccer:eng.1,soccer:esp.1,basketball:nba,baseball:mlb,icehockey:nhl,football:nfl
+ESPN_LEAGUES=soccer:eng.1,soccer:esp.1,football:nfl
 ADMIN_SYNC_TOKEN=
 
-## XubiTV integration
+## Home Air TV integration
 
-Point XubiTV's server-side Sports Scraper URL to:
+Point Home Air TV's server-side Sports Scraper URL to:
 
 https://YOUR-RAILWAY-DOMAIN/api/sports/events
 
-Do not make every client scrape the upstream sites. XubiTV should fetch this one API and continue using its existing realtime Firebase SportsEvent pipeline.
+Do not make every client scrape the upstream sites. Home Air TV should fetch this one API and continue using its existing realtime Firebase SportsEvent pipeline.
 
 ## Upstream notice
 
-The default source is a 365Scores web data adapter, with ESPN adapters available but disabled by default because the ESPN endpoints returned HTTP 403 from the Railway runtime during testing. Add or replace adapters under src/sources/ without changing the public XubiTV API contract.
+The default source is a 365Scores web data adapter restricted to Football (sport ID 1) and Cricket (sport ID 10), with ESPN adapters available but disabled by default because the ESPN endpoints returned HTTP 403 from the Railway runtime during testing. Add or replace adapters under src/sources/ without changing the public Home Air TV API contract.
 
 Check the upstream provider's terms and applicable rules before production deployment or redistribution of data.
