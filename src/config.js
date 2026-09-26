@@ -25,8 +25,10 @@ export const config = {
   staleRetentionMs: asInt(process.env.STALE_RETENTION_MINUTES, 60) * 60_000,
   endedRetentionMs: asInt(process.env.ENDED_RETENTION_MINUTES, 360) * 60_000,
   adminSyncToken: process.env.ADMIN_SYNC_TOKEN || '',
+  espnEnabled: String(process.env.ESPN_ENABLED ?? 'false').toLowerCase() === 'true',
   espnLeagues: parseLeagues(process.env.ESPN_LEAGUES),
-  cricketEnabled: String(process.env.CRICKET_ENABLED ?? 'true').toLowerCase() !== 'false',
+  cricketEnabled: String(process.env.CRICKET_ENABLED ?? 'false').toLowerCase() === 'true',
+  scores365Enabled: String(process.env.SCORES365_ENABLED ?? 'true').toLowerCase() !== 'false',
   cricketRegion: process.env.CRICKET_REGION || 'bd',
   cricketTimezone: process.env.CRICKET_TIMEZONE || 'Asia/Dhaka'
 };
