@@ -4,6 +4,12 @@ import { scrape365Scores } from './sources/365scores.js';
 import { scrapeCricket } from './sources/cricket.js';
 import { mergeEvents, pruneEvents } from './normalize.js';
 
+const ALLOWED_SPORTS = new Set(['football', 'cricket']);
+
+function isAllowedSport(event) {
+  return ALLOWED_SPORTS.has(String(event?.sportCategory || '').trim().toLowerCase());
+}
+
 class SportsScraper {
   constructor() {
     this.events = [];
@@ -31,10 +37,12 @@ class SportsScraper {
           ? scrapeCricket({ timeoutMs: config.requestTimeoutMs, region: config.cricketRegion, timezone: config.cricketTimezone })
           : Promise.resolve({ events: [], errors: [] })
       ]);
-      const incoming = [...scores365Result.events, ...espnResult.events, ...cricketResult.events];
+      const incoming = [...scores365Result.events, ...espnResult.events, ...cricketResult.events]
+        .filter(isAllowedSport);
       const errors = [...scores365Result.errors, ...espnResult.errors, ...cricketResult.errors];
 
-      const old = this.events;
+      // Enforce the product scope even across deployments/restarts: only Football and Cricket remain.
+      const old = this.events.filter(isAllowedSport);
       const oldIds = new Set(old.map(e => e.id));
       const merged = mergeEvents(old, incoming);
       const seen = new Set(incoming.map(e => e.id));
