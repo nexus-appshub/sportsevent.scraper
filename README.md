@@ -63,6 +63,6 @@ Do not make every client scrape the upstream sites. XubiTV should fetch this one
 
 ## Upstream notice
 
-The included adapters use public/undocumented web endpoints and can change. Add or replace adapters under src/sources/ without changing the public XubiTV API contract.
+The default source is a 365Scores web data adapter, with ESPN adapters available but disabled by default because the ESPN endpoints returned HTTP 403 from the Railway runtime during testing. Add or replace adapters under src/sources/ without changing the public XubiTV API contract.
 
 Check the upstream provider's terms and applicable rules before production deployment or redistribution of data.
